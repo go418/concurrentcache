@@ -1,5 +1,8 @@
 # concurrentcache
 
+<a href="https://godoc.org/github.com/go418/concurrentcache"><img src="https://godoc.org/github.com/go418/concurrentcache?status.svg"/></a>
+<a href="https://goreportcard.com/report/github.com/go418/concurrentcache"><img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/go418/concurrentcache"/></a>
+
 > concurrentcache is an in-memory [self-populating](#a-self-populating-cache) cache that [deduplicates concurrent requests](#a-concurrent-deduplicating-cache). Resulting
 > in a sequential execution of the function that generates the cache value.
 
