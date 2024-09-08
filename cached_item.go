@@ -35,12 +35,12 @@ type CachedItem[V any] struct {
 	worker      *cacheWorker[V]
 
 	// Generator function that is called when the cached value is missing or out-of-date.
-	Generate GenerateMissingItemValueFunc[V]
+	Generate ItemGenerator[V]
 }
 
-type GenerateMissingItemValueFunc[V any] func(ctx context.Context) (V, error)
+type ItemGenerator[V any] func(ctx context.Context) (V, error)
 
-func NewCachedItem[V any](generateMissingValue GenerateMissingItemValueFunc[V]) *CachedItem[V] {
+func NewCachedItem[V any](generateMissingValue ItemGenerator[V]) *CachedItem[V] {
 	return &CachedItem[V]{
 		Generate: generateMissingValue,
 	}

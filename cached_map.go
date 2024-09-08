@@ -30,7 +30,7 @@ type CachedMap[K comparable, V any] struct {
 	items map[K]cacheItem[V]
 
 	// Generator function that is called when the cached value is missing or out-of-date.
-	Generate GenerateMissingMapValueFunc[K, V]
+	Generate MapGenerator[K, V]
 }
 
 type cacheItem[V any] struct {
@@ -42,9 +42,9 @@ type cacheItem[V any] struct {
 	worker      *cacheWorker[V]
 }
 
-type GenerateMissingMapValueFunc[K comparable, V any] func(ctx context.Context, key K) (V, error)
+type MapGenerator[K comparable, V any] func(ctx context.Context, key K) (V, error)
 
-func NewCachedMap[K comparable, V any](generateMissingValue GenerateMissingMapValueFunc[K, V]) *CachedMap[K, V] {
+func NewCachedMap[K comparable, V any](generateMissingValue MapGenerator[K, V]) *CachedMap[K, V] {
 	return &CachedMap[K, V]{
 		Generate: generateMissingValue,
 		items:    make(map[K]cacheItem[V]),
