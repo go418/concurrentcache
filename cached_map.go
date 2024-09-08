@@ -26,9 +26,11 @@ import (
 )
 
 type CachedMap[K comparable, V any] struct {
-	mu                   sync.Mutex
-	generateMissingValue GenerateMissingMapValueFunc[K, V]
-	items                map[K]cacheItem[V]
+	mu    sync.Mutex
+	items map[K]cacheItem[V]
+
+	// Generator function that is called when the cached value is missing or out-of-date.
+	GenerateMissingValue GenerateMissingMapValueFunc[K, V]
 }
 
 type cacheItem[V any] struct {
@@ -44,7 +46,7 @@ type GenerateMissingMapValueFunc[K comparable, V any] func(ctx context.Context, 
 
 func NewCachedMap[K comparable, V any](generateMissingValue GenerateMissingMapValueFunc[K, V]) *CachedMap[K, V] {
 	return &CachedMap[K, V]{
-		generateMissingValue: generateMissingValue,
+		GenerateMissingValue: generateMissingValue,
 		items:                make(map[K]cacheItem[V]),
 	}
 }
@@ -53,6 +55,9 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 	debugger := debuginternal.DebuggerFromContext(ctx)
 
 	c.mu.Lock()
+	if c.items == nil {
+		c.items = make(map[K]cacheItem[V])
+	}
 	item := c.items[key]
 
 	if !minVersion.matchesItem(item.itemId) {
@@ -167,7 +172,7 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 
 func (c *CachedMap[K, V]) run(ctx context.Context, worker *cacheWorker[V], key K) {
 	defer close(worker.done)
-	result, error := c.generateMissingValue(ctx, key)
+	result, error := c.GenerateMissingValue(ctx, key)
 
 	// set the result on the worker
 	worker.cachedValue.value = result
