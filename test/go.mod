@@ -2,10 +2,10 @@ module test
 
 go 1.22.5
 
-replace concurrentcache => ../
+replace github.com/go418/concurrentcache => ../
 
 require (
-	concurrentcache v0.0.0-00010101000000-000000000000
+	github.com/go418/concurrentcache v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/sync v0.7.0
 )

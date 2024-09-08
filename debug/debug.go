@@ -14,33 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package concurrentcache
+package debug
 
-import "context"
+import (
+	debuginternal "github.com/go418/concurrentcache/internal/debug"
+)
 
-type debugKey struct{}
-
-type debugFns struct {
-	onStartedWaiting func()
-}
-
-func (d *debugFns) OnStartedWaiting() {
-	if d == nil || d.onStartedWaiting == nil {
-		return
-	}
-
-	d.onStartedWaiting()
-}
-
-func OnStartedWaiting(ctx context.Context, onStartedWaiting func()) context.Context {
-	return context.WithValue(ctx, debugKey{}, debugFns{
-		onStartedWaiting: onStartedWaiting,
-	})
-}
-
-func debuggerFromContext(ctx context.Context) *debugFns {
-	if v, ok := ctx.Value(debugKey{}).(debugFns); ok {
-		return &v
-	}
-	return nil
-}
+// OnStartedWaiting is a callback that is called when a Get operation starts
+// waiting for the generator function to finish. This should only be used for
+// debugging purposes and is subject to change.
+var OnStartedWaiting = debuginternal.OnStartedWaiting

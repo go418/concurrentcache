@@ -26,7 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
-	"concurrentcache"
+	"github.com/go418/concurrentcache"
+	"github.com/go418/concurrentcache/debug"
 )
 
 // The multiple Get calls for the same key should result in a single generateMissingValue call.
@@ -238,7 +239,7 @@ func testItemGet(
 	for expectedCount := 1; expectedCount <= nrRepeats; expectedCount++ {
 		startingGetCalls := nrConcurrentGetCalls
 		allWaiting := make(chan struct{}) // Block until all Get calls are waiting.
-		debugContext := concurrentcache.OnStartedWaiting(rootCtx, func() {
+		debugContext := debug.OnStartedWaiting(rootCtx, func() {
 			startingGetCalls--
 
 			if startingGetCalls == 0 {

@@ -21,6 +21,8 @@ import (
 	"errors"
 	"math/rand/v2"
 	"sync"
+
+	debuginternal "github.com/go418/concurrentcache/internal/debug"
 )
 
 type CachedItem[V any] struct {
@@ -45,7 +47,7 @@ func NewCachedItem[V any](generateMissingValue GenerateMissingItemValueFunc[V]) 
 }
 
 func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result[V] {
-	debugger := debuggerFromContext(ctx)
+	debugger := debuginternal.DebuggerFromContext(ctx)
 
 	c.mu.Lock()
 	item := c

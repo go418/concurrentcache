@@ -26,7 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
-	"concurrentcache"
+	"github.com/go418/concurrentcache"
+	"github.com/go418/concurrentcache/debug"
 )
 
 type returnValue struct {
@@ -314,7 +315,7 @@ func testMapGet(
 			for expectedCount := 1; expectedCount <= nrRepeats; expectedCount++ {
 				startingGetCalls := nrConcurrentGetCalls
 				allWaiting := make(chan struct{}) // Block until all Get calls are waiting.
-				debugContext := concurrentcache.OnStartedWaiting(rootCtx, func() {
+				debugContext := debug.OnStartedWaiting(rootCtx, func() {
 					startingGetCalls--
 
 					if startingGetCalls == 0 {
