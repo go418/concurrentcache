@@ -21,6 +21,8 @@ import (
 	"errors"
 	"math/rand/v2"
 	"sync"
+
+	debuginternal "github.com/go418/concurrentcache/internal/debug"
 )
 
 type CachedMap[K comparable, V any] struct {
@@ -48,7 +50,7 @@ func NewCachedMap[K comparable, V any](generateMissingValue GenerateMissingMapVa
 }
 
 func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersion) Result[V] {
-	debugger := debuggerFromContext(ctx)
+	debugger := debuginternal.DebuggerFromContext(ctx)
 
 	c.mu.Lock()
 	item := c.items[key]
