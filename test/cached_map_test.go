@@ -156,7 +156,7 @@ func TestMapPanic(t *testing.T) {
 			t.Errorf("expected panic but did not occur")
 		}
 
-		require.Equal(t, "[programming error]: provided minVersion does not correspond to the current cache; don't mix CacheVersions across caches", r)
+		require.Equal(t, "[programming error]: provided minVersion does not correspond to the current (cache, key) combo; don't mix CacheVersions across items", r)
 	}()
 
 	cache2.Get(rootCtx, "key1", result1.NextVersion)

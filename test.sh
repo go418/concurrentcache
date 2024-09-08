@@ -2,7 +2,7 @@
 
 pushd ./test/ || exit 1
 
-go test ./...
+go test -race ./...
 
 popd || exit 1
 
