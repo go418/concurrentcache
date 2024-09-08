@@ -104,6 +104,38 @@ func TestMapSameKey(t *testing.T) {
 	require.Equal(t, map[string]int{"key1": 1, "key2": 1}, counts)
 }
 
+// The cache should be constructable directly (without calling NewCachedItem).
+func TestMapConstructable(t *testing.T) {
+	rootCtx := context.Background()
+
+	counts := map[string]int{}
+	cache := concurrentcache.CachedMap[string, returnValue]{
+		GenerateMissingValue: func(ctx context.Context, key string) (returnValue, error) {
+			counts[key]++
+			return returnValue{
+				requestedKey: key,
+				count:        counts[key],
+			}, nil
+		},
+	}
+
+	for i := 0; i < 10; i++ {
+		result := cache.Get(rootCtx, "key1", concurrentcache.AnyVersion)
+		require.Equal(t, returnValue{requestedKey: "key1", count: 1}, result.Value)
+		require.NoError(t, result.Error)
+		require.Equal(t, i > 0, result.FromCache)
+	}
+
+	// Get using a different key.
+	result := cache.Get(rootCtx, "key2", concurrentcache.AnyVersion)
+	require.Equal(t, returnValue{requestedKey: "key2", count: 1}, result.Value)
+	require.NoError(t, result.Error)
+	require.False(t, result.FromCache)
+
+	// Check that the values were only created once.
+	require.Equal(t, map[string]int{"key1": 1, "key2": 1}, counts)
+}
+
 // An error returned by generateMissingValue should be cached similarly to a valid value.
 func TestMapError(t *testing.T) {
 	rootCtx := context.Background()
