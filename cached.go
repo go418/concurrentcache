@@ -18,18 +18,18 @@ package concurrentcache
 
 type CacheVersion struct {
 	version uint64
-	cacheId uint64
+	itemId  uint64
 }
 
-func (cv CacheVersion) matchesCache(cacheId uint64) bool {
-	// If the cacheId in CacheVersion is 0, we are working with a general case
-	// version (eg. AnyVersion or NonCachedVersion) these work for all caches.
-	if cv.cacheId == 0 {
+func (cv CacheVersion) matchesItem(itemId uint64) bool {
+	// If the itemId in CacheVersion is 0, we are working with a general case
+	// version (eg. AnyVersion or NonCachedVersion) these work for all items.
+	if cv.itemId == 0 {
 		return true
 	}
 
-	// Make sure the cacheIds match
-	return cv.cacheId == cacheId
+	// Make sure the itemIds match
+	return cv.itemId == itemId
 }
 
 var (
@@ -82,7 +82,7 @@ func (vv versionedValue[V]) newer() CacheVersion {
 	return CacheVersion{version: vv.version + 1}
 }
 
-func (vv versionedValue[V]) toResult(cacheId uint64, isFromCache bool) Result[V] {
+func (vv versionedValue[V]) toResult(itemId uint64, isFromCache bool) Result[V] {
 	return Result[V]{
 		Value:     vv.value,
 		Error:     vv.err,
@@ -91,7 +91,7 @@ func (vv versionedValue[V]) toResult(cacheId uint64, isFromCache bool) Result[V]
 		// For a result that is from the cache, the NextVersion is the version
 		// of the result plus one, making it newer than the current version.
 		NextVersion: CacheVersion{
-			cacheId: cacheId,
+			itemId:  itemId,
 			version: vv.version + 1,
 		},
 	}

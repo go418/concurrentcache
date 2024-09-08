@@ -24,48 +24,52 @@ import (
 )
 
 type CachedMap[K comparable, V any] struct {
-	// Unique identifier for this cache, used to make sure CacheVersions correspond to this cache.
-	cacheId uint64
-
 	mu                   sync.Mutex
 	generateMissingValue GenerateMissingMapValueFunc[K, V]
-	cachedValues         map[K]versionedValue[V]
-	workers              map[K]*cacheWorker[V]
+	items                map[K]cacheItem[V]
+}
+
+type cacheItem[V any] struct {
+	// Unique identifier for this item, used to make sure CacheVersions correspond to this item.
+	// This value is 0 until the first generator function call starts executing.
+	itemId uint64
+
+	cachedValue versionedValue[V]
+	worker      *cacheWorker[V]
 }
 
 type GenerateMissingMapValueFunc[K comparable, V any] func(ctx context.Context, key K) (V, error)
 
 func NewCachedMap[K comparable, V any](generateMissingValue GenerateMissingMapValueFunc[K, V]) *CachedMap[K, V] {
 	return &CachedMap[K, V]{
-		cacheId: rand.Uint64(),
-
 		generateMissingValue: generateMissingValue,
-		cachedValues:         make(map[K]versionedValue[V]),
-		workers:              make(map[K]*cacheWorker[V]),
+		items:                make(map[K]cacheItem[V]),
 	}
 }
 
 func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersion) Result[V] {
 	debugger := debuggerFromContext(ctx)
 
-	if !minVersion.matchesCache(c.cacheId) {
-		panic("[programming error]: provided minVersion does not correspond to the current cache; don't mix CacheVersions across caches")
-	}
-
 	c.mu.Lock()
+	item := c.items[key]
+
+	if !minVersion.matchesItem(item.itemId) {
+		c.mu.Unlock()
+		panic("[programming error]: provided minVersion does not correspond to the current (cache, key) combo; don't mix CacheVersions across items")
+	}
 
 	var nextVersion CacheVersion
 	// Return the cached value if it is at least as new as the minimum version.
 	{
-		cachedValue := c.cachedValues[key]
+		cachedValue := item.cachedValue
 		if !cachedValue.isZero() && cachedValue.hasMinimumVersion(minVersion) {
 			defer c.mu.Unlock() // Unlock after reading the cached value.
-			return cachedValue.toResult(c.cacheId, true)
+			return cachedValue.toResult(item.itemId, true)
 		}
 		nextVersion = cachedValue.newer()
 	}
 
-	worker := c.workers[key] // This pointer will be used even outside the lock.
+	worker := item.worker // This pointer will be used even outside the lock.
 
 	// If there is a worker running and it was canceled, wait for it to finish and
 	// call 'Get' again accepting any value that is newer than the current cachedValue.
@@ -91,6 +95,11 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 	if worker == nil {
 		workerCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 
+		// If the item does not have an itemId, generate a random one.
+		if item.itemId == 0 {
+			item.itemId = rand.Uint64()
+		}
+
 		worker = &cacheWorker[V]{
 			cachedValue: versionedValue[V]{
 				version: nextVersion.version,
@@ -100,7 +109,9 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 			done:              make(chan struct{}),
 			nrGetCallsWaiting: 0,
 		}
-		c.workers[key] = worker
+		item.worker = worker
+
+		c.items[key] = item
 
 		go c.run(workerCtx, worker, key)
 	}
@@ -149,7 +160,7 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 	case <-worker.done: // The worker has finished.
 	}
 
-	return worker.cachedValue.toResult(c.cacheId, false)
+	return worker.cachedValue.toResult(item.itemId, false)
 }
 
 func (c *CachedMap[K, V]) run(ctx context.Context, worker *cacheWorker[V], key K) {
@@ -164,11 +175,15 @@ func (c *CachedMap[K, V]) run(ctx context.Context, worker *cacheWorker[V], key K
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	item := c.items[key]
+
 	// Set the worker to nil to indicate that it is done.
-	c.workers[key] = nil
+	item.worker = nil
 
 	// Update the cache value if the worker was not canceled
 	if worker.nrGetCallsWaiting > 0 {
-		c.cachedValues[key] = worker.cachedValue
+		item.cachedValue = worker.cachedValue
 	}
+
+	c.items[key] = item
 }

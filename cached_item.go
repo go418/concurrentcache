@@ -24,8 +24,9 @@ import (
 )
 
 type CachedItem[V any] struct {
-	// Unique identifier for this cache, used to make sure CacheVersions correspond to this cache.
-	cacheId uint64
+	// Unique identifier for this item, used to make sure CacheVersions correspond to this item.
+	// This value is 0 until the first generator function call starts executing.
+	itemId uint64
 
 	mu                   sync.Mutex
 	generateMissingValue GenerateMissingItemValueFunc[V]
@@ -37,7 +38,7 @@ type GenerateMissingItemValueFunc[V any] func(ctx context.Context) (V, error)
 
 func NewCachedItem[V any](generateMissingValue GenerateMissingItemValueFunc[V]) *CachedItem[V] {
 	return &CachedItem[V]{
-		cacheId: rand.Uint64(),
+		itemId: rand.Uint64(),
 
 		generateMissingValue: generateMissingValue,
 	}
@@ -46,24 +47,26 @@ func NewCachedItem[V any](generateMissingValue GenerateMissingItemValueFunc[V]) 
 func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result[V] {
 	debugger := debuggerFromContext(ctx)
 
-	if !minVersion.matchesCache(c.cacheId) {
+	c.mu.Lock()
+	item := c
+
+	if !minVersion.matchesItem(item.itemId) {
+		c.mu.Unlock()
 		panic("[programming error]: provided minVersion does not correspond to the current cache; don't mix CacheVersions across caches")
 	}
-
-	c.mu.Lock()
 
 	var nextVersion CacheVersion
 	// Return the cached value if it is at least as new as the minimum version.
 	{
-		cachedValue := c.cachedValue
+		cachedValue := item.cachedValue
 		if !cachedValue.isZero() && cachedValue.hasMinimumVersion(minVersion) {
 			defer c.mu.Unlock() // Unlock after reading the cached value.
-			return cachedValue.toResult(c.cacheId, true)
+			return cachedValue.toResult(item.itemId, true)
 		}
 		nextVersion = cachedValue.newer()
 	}
 
-	worker := c.worker // This pointer will be used even outside the lock.
+	worker := item.worker // This pointer will be used even outside the lock.
 
 	// If there is a worker running and it was canceled, wait for it to finish and
 	// call 'Get' again accepting any value that is newer than the current cachedValue.
@@ -89,6 +92,11 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 	if worker == nil {
 		workerCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 
+		// If the item does not have an itemId, generate a random one.
+		if item.itemId == 0 {
+			item.itemId = rand.Uint64()
+		}
+
 		worker = &cacheWorker[V]{
 			cachedValue: versionedValue[V]{
 				version: nextVersion.version,
@@ -98,7 +106,7 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 			done:              make(chan struct{}),
 			nrGetCallsWaiting: 0,
 		}
-		c.worker = worker
+		item.worker = worker
 
 		go c.run(workerCtx, worker)
 	}
@@ -148,7 +156,7 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 	case <-worker.done: // The worker has finished.
 	}
 
-	return worker.cachedValue.toResult(c.cacheId, false)
+	return worker.cachedValue.toResult(item.itemId, false)
 }
 
 func (c *CachedItem[V]) run(ctx context.Context, worker *cacheWorker[V]) {
