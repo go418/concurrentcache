@@ -59,7 +59,7 @@ func TestItemConstructable(t *testing.T) {
 
 	count := 0
 	cache := concurrentcache.CachedItem[returnValue]{
-		GenerateMissingValue: func(ctx context.Context) (returnValue, error) {
+		Generate: func(ctx context.Context) (returnValue, error) {
 			count++
 			return returnValue{
 				count: count,

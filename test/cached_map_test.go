@@ -110,7 +110,7 @@ func TestMapConstructable(t *testing.T) {
 
 	counts := map[string]int{}
 	cache := concurrentcache.CachedMap[string, returnValue]{
-		GenerateMissingValue: func(ctx context.Context, key string) (returnValue, error) {
+		Generate: func(ctx context.Context, key string) (returnValue, error) {
 			counts[key]++
 			return returnValue{
 				requestedKey: key,
