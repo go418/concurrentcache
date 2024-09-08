@@ -53,6 +53,31 @@ func TestItemMultiple(t *testing.T) {
 	require.Equal(t, 1, count)
 }
 
+// The cache should be constructable directly (without calling NewCachedItem).
+func TestItemConstructable(t *testing.T) {
+	rootCtx := context.Background()
+
+	count := 0
+	cache := concurrentcache.CachedItem[returnValue]{
+		Generate: func(ctx context.Context) (returnValue, error) {
+			count++
+			return returnValue{
+				count: count,
+			}, nil
+		},
+	}
+
+	for i := 0; i < 10; i++ {
+		result := cache.Get(rootCtx, concurrentcache.AnyVersion)
+		require.Equal(t, returnValue{count: 1}, result.Value)
+		require.NoError(t, result.Error)
+		require.Equal(t, i > 0, result.FromCache)
+	}
+
+	// Check that the values were only created once.
+	require.Equal(t, 1, count)
+}
+
 // An error returned by generateMissingValue should be cached similarly to a valid value.
 func TestItemError(t *testing.T) {
 	rootCtx := context.Background()
