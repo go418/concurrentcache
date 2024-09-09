@@ -78,6 +78,10 @@ func (vv versionedValue[V]) newer() CacheVersion {
 	return CacheVersion{version: vv.version + 1}
 }
 
+func (vv versionedValue[V]) sameAge() CacheVersion {
+	return CacheVersion{version: vv.version}
+}
+
 func (vv versionedValue[V]) toResult(isFromCache bool) Result[V] {
 	return Result[V]{
 		Value:     vv.value,
