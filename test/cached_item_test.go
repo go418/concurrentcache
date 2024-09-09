@@ -102,34 +102,6 @@ func TestItemError(t *testing.T) {
 	require.Equal(t, 1, count)
 }
 
-func TestItemPanic(t *testing.T) {
-	rootCtx := context.Background()
-
-	cache1 := concurrentcache.NewCachedItem(func(ctx context.Context) (bool, error) {
-		return true, nil
-	})
-
-	cache2 := concurrentcache.NewCachedItem(func(ctx context.Context) (bool, error) {
-		return true, nil
-	})
-
-	// Get a value from cache1 to generate a version.
-	result1 := cache1.Get(rootCtx, concurrentcache.AnyVersion)
-	require.NoError(t, result1.Error)
-
-	// Attempt to use the version from cache1 on cache2, which should panic.
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Errorf("expected panic but did not occur")
-		}
-
-		require.Equal(t, "[programming error]: provided minVersion does not correspond to the current cache; don't mix CacheVersions across caches", r)
-	}()
-
-	cache2.Get(rootCtx, result1.NextVersion)
-}
-
 // CacheVersion can be used to force values in the cache to be re-fetched.
 // There are 3 mechanisms:
 // 1. set minVersion=AnyVersion, will return a cached or non-cached value

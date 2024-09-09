@@ -19,7 +19,6 @@ package concurrentcache
 import (
 	"context"
 	"errors"
-	"math/rand/v2"
 	"sync"
 
 	debuginternal "github.com/go418/concurrentcache/internal/debug"
@@ -29,10 +28,6 @@ import (
 // that deduplicates concurrent requests. Resulting in a sequential execution of the
 // function that generates the cache value.
 type CachedItem[V any] struct {
-	// Unique identifier for this item, used to make sure CacheVersions correspond to this item.
-	// This value is 0 until the first generator function call starts executing.
-	itemId uint64
-
 	mu          sync.Mutex
 	cachedValue versionedValue[V]
 	worker      *cacheWorker[V]
@@ -65,18 +60,13 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 	c.mu.Lock()
 	item := c
 
-	if !minVersion.matchesItem(item.itemId) {
-		c.mu.Unlock()
-		panic("[programming error]: provided minVersion does not correspond to the current cache; don't mix CacheVersions across caches")
-	}
-
 	var nextVersion CacheVersion
 	// Return the cached value if it is at least as new as the minimum version.
 	{
 		cachedValue := item.cachedValue
 		if !cachedValue.isZero() && cachedValue.hasMinimumVersion(minVersion) {
 			defer c.mu.Unlock() // Unlock after reading the cached value.
-			return cachedValue.toResult(item.itemId, true)
+			return cachedValue.toResult(true)
 		}
 		nextVersion = cachedValue.newer()
 	}
@@ -107,14 +97,9 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 	if worker == nil {
 		workerCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 
-		// If the item does not have an itemId, generate a random one.
-		if item.itemId == 0 {
-			item.itemId = rand.Uint64()
-		}
-
 		worker = &cacheWorker[V]{
 			cachedValue: versionedValue[V]{
-				version: nextVersion.version,
+				version: newVersion().version,
 			},
 
 			cancel:            cancel,
@@ -171,7 +156,7 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 	case <-worker.done: // The worker has finished.
 	}
 
-	return worker.cachedValue.toResult(item.itemId, false)
+	return worker.cachedValue.toResult(false)
 }
 
 func (c *CachedItem[V]) run(ctx context.Context, worker *cacheWorker[V]) {
