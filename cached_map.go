@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	debuginternal "github.com/go418/concurrentcache/internal/debug"
+	versionsinternal "github.com/go418/concurrentcache/internal/versions"
 )
 
 // concurrentcache.CachedMap is an in-memory self-populating key-addressable cache
@@ -107,7 +108,7 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 
 		worker = &cacheWorker[V]{
 			cachedValue: versionedValue[V]{
-				version: newVersion().version,
+				version: versionsinternal.NewGlobalVersion(),
 			},
 
 			cancel:            cancel,
@@ -237,7 +238,7 @@ func (c *CachedMap[K, V]) setLocked(key K, value V, version CacheVersion) {
 		if item.worker != nil {
 			version = item.worker.cachedValue.sameAge()
 		} else {
-			version = newVersion()
+			version = versionsinternal.NewGlobalVersion()
 		}
 	}
 
@@ -248,7 +249,7 @@ func (c *CachedMap[K, V]) setLocked(key K, value V, version CacheVersion) {
 
 	item.cachedValue = versionedValue[V]{
 		value:   value,
-		version: version.version,
+		version: version,
 	}
 	c.items[key] = item
 }
