@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	debuginternal "github.com/go418/concurrentcache/internal/debug"
+	versionsinternal "github.com/go418/concurrentcache/internal/versions"
 )
 
 // concurrentcache.CachedMap is an in-memory self-populating single-value cache
@@ -99,7 +100,7 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 
 		worker = &cacheWorker[V]{
 			cachedValue: versionedValue[V]{
-				version: newVersion().version,
+				version: versionsinternal.NewGlobalVersion(),
 			},
 
 			cancel:            cancel,
@@ -202,7 +203,7 @@ func (c *CachedItem[V]) Set(ctx context.Context, value V, version CacheVersion) 
 		if c.worker != nil {
 			version = c.worker.cachedValue.sameAge()
 		} else {
-			version = newVersion()
+			version = versionsinternal.NewGlobalVersion()
 		}
 	}
 
@@ -213,6 +214,6 @@ func (c *CachedItem[V]) Set(ctx context.Context, value V, version CacheVersion) 
 
 	c.cachedValue = versionedValue[V]{
 		value:   value,
-		version: version.version,
+		version: version,
 	}
 }
