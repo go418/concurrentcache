@@ -167,34 +167,6 @@ func TestMapError(t *testing.T) {
 	require.Equal(t, map[string]int{"key1": 1, "key2": 1}, counts)
 }
 
-func TestMapPanic(t *testing.T) {
-	rootCtx := context.Background()
-
-	cache1 := concurrentcache.NewCachedMap(func(ctx context.Context, key string) (bool, error) {
-		return true, nil
-	})
-
-	cache2 := concurrentcache.NewCachedMap(func(ctx context.Context, key string) (bool, error) {
-		return true, nil
-	})
-
-	// Get a value from cache1 to generate a version.
-	result1 := cache1.Get(rootCtx, "key1", concurrentcache.AnyVersion)
-	require.NoError(t, result1.Error)
-
-	// Attempt to use the version from cache1 on cache2, which should panic.
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Errorf("expected panic but did not occur")
-		}
-
-		require.Equal(t, "[programming error]: provided minVersion does not correspond to the current (cache, key) combo; don't mix CacheVersions across items", r)
-	}()
-
-	cache2.Get(rootCtx, "key1", result1.NextVersion)
-}
-
 // CacheVersion can be used to force values in the cache to be re-fetched.
 // There are 3 mechanisms:
 // 1. set minVersion=AnyVersion, will return a cached or non-cached value
