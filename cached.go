@@ -17,8 +17,25 @@ limitations under the License.
 package concurrentcache
 
 import (
+	"context"
+
 	versionsinternal "github.com/go418/concurrentcache/internal/versions"
 )
+
+// NewWorkerContext is a function that creates a new context for the worker.
+// It receives the context passed to the Get call (without the cancel) and
+// returns the context for the worker and a function that will be called when
+// the Get call is canceled before the worker finishes.
+type NewWorkerContext func(getCtxWithoutCancel context.Context) (worker context.Context, getDetached func())
+
+func defaultWorkerContext(fn NewWorkerContext) NewWorkerContext {
+	if fn != nil {
+		return fn
+	}
+	return func(getCtxWithoutCancel context.Context) (context.Context, func()) {
+		return getCtxWithoutCancel, func() {}
+	}
+}
 
 type CacheVersion = versionsinternal.CacheVersion
 
