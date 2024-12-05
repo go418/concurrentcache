@@ -34,6 +34,13 @@ type CachedMap[K comparable, V any] struct {
 
 	// Generator function that is called when the cached value is missing or out-of-date.
 	Generate MapGenerator[K, V]
+
+	// NewWorkerContext is a function that creates a new context for the worker.
+	// It receives the context passed to the Get call (without the cancel) and
+	// returns the context for the worker and a function that will be called when
+	// the Get call is canceled before the worker finishes.
+	// This function is optional and will by default return the context passed to it.
+	NewWorkerContext NewWorkerContext
 }
 
 type cacheItem[V any] struct {
@@ -102,9 +109,13 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 		return result
 	}
 
+	var getDetached func()
+
 	// If there is no worker running, create a new worker.
 	if worker == nil {
-		workerCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
+		var workerCtx context.Context
+		workerCtx, getDetached = defaultWorkerContext(c.NewWorkerContext)(context.WithoutCancel(ctx))
+		workerCtx, cancel := context.WithCancelCause(workerCtx)
 
 		worker = &cacheWorker[V]{
 			cachedValue: versionedValue[V]{
@@ -141,6 +152,10 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 
 		// Since we are not the last reader, we don't need to cancel the worker.
 		if rc > 0 {
+			if getDetached != nil {
+				getDetached()
+			}
+
 			return newFailedResult[V](context.Cause(ctx), minVersion)
 		}
 
