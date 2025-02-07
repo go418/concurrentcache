@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -eu -o pipefail
+
 pushd ./test/ || exit 1
 
 go test -race ./...
