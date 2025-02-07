@@ -70,8 +70,8 @@ func TestMapLogger(t *testing.T) {
 
 	if testingLogger, ok := testLogger.GetSink().(ktesting.Underlier); ok {
 		buffer := testingLogger.GetBuffer()
-		require.Equal(t, `INFO test log 1 worker="attached"
-INFO test log 2 worker="detached"
+		require.Equal(t, `INFO test log 1 worker="attached" key="value"
+INFO test log 2 worker="detached" key="value"
 `, buffer.String())
 	}
 }
@@ -118,8 +118,8 @@ func TestItemLogger(t *testing.T) {
 
 	if testingLogger, ok := testLogger.GetSink().(ktesting.Underlier); ok {
 		buffer := testingLogger.GetBuffer()
-		require.Equal(t, `INFO test log 1 worker="attached"
-INFO test log 2 worker="detached"
+		require.Equal(t, `INFO test log 1 worker="attached" key="value"
+INFO test log 2 worker="detached" key="value"
 `, buffer.String())
 	}
 }
