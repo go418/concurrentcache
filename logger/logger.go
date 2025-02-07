@@ -51,22 +51,22 @@ type loggerWrapper struct {
 
 func (lw *loggerWrapper) Info(level int, msg string, keysAndValues ...any) {
 	newKeysAndValues := make([]any, 0, len(keysAndValues)+2)
-	newKeysAndValues = append(newKeysAndValues, "worker")
 	if lw.detached.Load() {
-		newKeysAndValues = append(newKeysAndValues, "detached")
+		newKeysAndValues = append(newKeysAndValues, "worker", "detached")
 	} else {
-		newKeysAndValues = append(newKeysAndValues, "attached")
+		newKeysAndValues = append(newKeysAndValues, "worker", "attached")
 	}
+	newKeysAndValues = append(newKeysAndValues, keysAndValues...)
 	lw.LogSink.Info(level, msg, newKeysAndValues...)
 }
 
 func (lw *loggerWrapper) Error(err error, msg string, keysAndValues ...any) {
 	newKeysAndValues := make([]any, 0, len(keysAndValues)+2)
-	newKeysAndValues = append(newKeysAndValues, "worker")
 	if lw.detached.Load() {
-		newKeysAndValues = append(newKeysAndValues, "detached")
+		newKeysAndValues = append(newKeysAndValues, "worker", "detached")
 	} else {
-		newKeysAndValues = append(newKeysAndValues, "attached")
+		newKeysAndValues = append(newKeysAndValues, "worker", "attached")
 	}
+	newKeysAndValues = append(newKeysAndValues, keysAndValues...)
 	lw.LogSink.Error(err, msg, newKeysAndValues...)
 }
