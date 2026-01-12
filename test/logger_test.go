@@ -48,8 +48,7 @@ func TestMapLogger(t *testing.T) {
 		logger.Info("test log 2", "key", "value")
 
 		return struct{}{}, nil
-	})
-	cache.NewWorkerContext = logger.NewWorkerContextWithLogger
+	}, concurrentcache.WithMapNewWorkerContext(logger.NewWorkerContextWithLogger))
 
 	get1Ctx, get1CtxCancel := context.WithCancel(rootCtx)
 	go func() {
@@ -96,8 +95,7 @@ func TestItemLogger(t *testing.T) {
 		logger.Info("test log 2", "key", "value")
 
 		return struct{}{}, nil
-	})
-	cache.NewWorkerContext = logger.NewWorkerContextWithLogger
+	}, concurrentcache.WithMapNewWorkerContext(logger.NewWorkerContextWithLogger))
 
 	get1Ctx, get1CtxCancel := context.WithCancel(rootCtx)
 	go func() {
