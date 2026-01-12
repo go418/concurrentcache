@@ -79,7 +79,7 @@ func (vv versionedValue[V]) isZero() bool {
 	return vv.version == versionsinternal.CacheVersion{} // == versionsinternal.AnyVersion too
 }
 
-func (vv versionedValue[V]) hasMinimumVersion(minVersion CacheVersion) bool {
+func (vv versionedValue[V]) isNotOlderThan(minVersion CacheVersion) bool {
 	return !versionsinternal.IsNewerVersion(minVersion, vv.version)
 }
 
@@ -99,7 +99,7 @@ func (vv versionedValue[V]) toResult(isFromCache bool) Result[V] {
 
 		// For a result that is from the cache, the NextVersion is the version
 		// of the result plus one, making it newer than the current version.
-		NextVersion: vv.newer(),
+		NextVersion: versionsinternal.NextVersion(vv.version),
 	}
 }
 

@@ -106,7 +106,7 @@ func TestItemError(t *testing.T) {
 // There are 3 mechanisms:
 // 1. set minVersion=AnyVersion, will return a cached or non-cached value
 // 2. set minVersion=NonCachedVersion, will force a non-cached value
-// 3. set minVersion=result.Newer(), will return a cached result only if it is newer than the previous result
+// 3. set minVersion=result.NextVersion, will return a cached result only if it is newer than the previous result
 func TestItemCacheVersion(t *testing.T) {
 	rootCtx := context.Background()
 
@@ -133,7 +133,7 @@ func TestItemCacheVersion(t *testing.T) {
 		require.False(t, result.FromCache)
 	})
 
-	t.Run("minVersion=lastResult.Newer() should result in a single new call to generateMissingValue", func(t *testing.T) {
+	t.Run("minVersion=lastResult.NextVersion should result in a single new call to generateMissingValue", func(t *testing.T) {
 		count := 0
 		cache := concurrentcache.NewCachedItem(func(ctx context.Context) (returnValue, error) {
 			count++
