@@ -33,15 +33,11 @@ type CachedItem[V any] struct {
 	cachedValue versionedValue[V]
 	worker      *cacheWorker[V]
 
-	// Generator function that is called when the cached value is missing or out-of-date.
-	Generate ItemGenerator[V]
+	// generate function that is called when the cached value is missing or out-of-date.
+	generate ItemGenerator[V]
 
-	// NewWorkerContext is a function that creates a new context for the worker.
-	// It receives the context passed to the Get call (without the cancel) and
-	// returns the context for the worker and a function that will be called when
-	// the Get call is canceled before the worker finishes.
-	// This function is optional and will by default return the context passed to it.
-	NewWorkerContext NewWorkerContext
+	// options contains the configuration options for the CachedItem.
+	options cacheOptions
 }
 
 // ItemGenerator is a function that generates a value for a CachedItem.
@@ -50,9 +46,15 @@ type CachedItem[V any] struct {
 // synchronization, as it is guaranteed to be called sequentially.
 type ItemGenerator[V any] func(ctx context.Context) (V, error)
 
-func NewCachedItem[V any](generateMissingValue ItemGenerator[V]) *CachedItem[V] {
+func NewCachedItem[V any](generateMissingValue ItemGenerator[V], opts ...CacheOption) *CachedItem[V] {
+	options := cacheOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	return &CachedItem[V]{
-		Generate: generateMissingValue,
+		generate: generateMissingValue,
+		options:  options,
 	}
 }
 
@@ -106,7 +108,7 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 	// If there is no worker running, create a new worker.
 	if worker == nil {
 		var workerCtx context.Context
-		workerCtx, getDetached = defaultWorkerContext(c.NewWorkerContext)(context.WithoutCancel(ctx))
+		workerCtx, getDetached = defaultWorkerContext(c.options.newWorkerContext)(context.WithoutCancel(ctx))
 		workerCtx, cancel := context.WithCancelCause(workerCtx)
 
 		worker = &cacheWorker[V]{
@@ -176,7 +178,7 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 
 func (c *CachedItem[V]) run(ctx context.Context, worker *cacheWorker[V]) {
 	defer close(worker.done)
-	result, error := c.Generate(ctx)
+	result, error := c.generate(ctx)
 
 	// set the result on the worker
 	worker.returnValue.value = result

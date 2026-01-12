@@ -32,15 +32,11 @@ type CachedMap[K comparable, V any] struct {
 	mu    sync.Mutex
 	items map[K]cacheItem[V]
 
-	// Generator function that is called when the cached value is missing or out-of-date.
-	Generate MapGenerator[K, V]
+	// generate function that is called when the cached value is missing or out-of-date.
+	generate MapGenerator[K, V]
 
-	// NewWorkerContext is a function that creates a new context for the worker.
-	// It receives the context passed to the Get call (without the cancel) and
-	// returns the context for the worker and a function that will be called when
-	// the Get call is canceled before the worker finishes.
-	// This function is optional and will by default return the context passed to it.
-	NewWorkerContext NewWorkerContext
+	// options contains the configuration options for the CachedMap.
+	options cacheOptions
 }
 
 type cacheItem[V any] struct {
@@ -54,10 +50,16 @@ type cacheItem[V any] struct {
 // synchronization, as it is guaranteed to be called sequentially.
 type MapGenerator[K comparable, V any] func(ctx context.Context, key K) (V, error)
 
-func NewCachedMap[K comparable, V any](generateMissingValue MapGenerator[K, V]) *CachedMap[K, V] {
+func NewCachedMap[K comparable, V any](generateMissingValue MapGenerator[K, V], opts ...CacheOption) *CachedMap[K, V] {
+	options := cacheOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	return &CachedMap[K, V]{
-		Generate: generateMissingValue,
 		items:    make(map[K]cacheItem[V]),
+		generate: generateMissingValue,
+		options:  options,
 	}
 }
 
@@ -114,7 +116,7 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 	// If there is no worker running, create a new worker.
 	if worker == nil {
 		var workerCtx context.Context
-		workerCtx, getDetached = defaultWorkerContext(c.NewWorkerContext)(context.WithoutCancel(ctx))
+		workerCtx, getDetached = defaultWorkerContext(c.options.newWorkerContext)(context.WithoutCancel(ctx))
 		workerCtx, cancel := context.WithCancelCause(workerCtx)
 
 		worker = &cacheWorker[V]{
@@ -186,7 +188,7 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 
 func (c *CachedMap[K, V]) run(ctx context.Context, worker *cacheWorker[V], key K) {
 	defer close(worker.done)
-	result, error := c.Generate(ctx, key)
+	result, error := c.generate(ctx, key)
 
 	// set the result on the worker
 	worker.returnValue.value = result
