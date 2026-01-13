@@ -36,7 +36,7 @@ type CachedMap[K comparable, V any] struct {
 	generate MapGenerator[K, V]
 
 	// options contains the configuration options for the CachedMap.
-	options cacheOptions
+	options mapCacheOptions
 }
 
 type cacheItem[V any] struct {
@@ -50,10 +50,10 @@ type cacheItem[V any] struct {
 // synchronization, as it is guaranteed to be called sequentially.
 type MapGenerator[K comparable, V any] func(ctx context.Context, key K) (V, error)
 
-func NewCachedMap[K comparable, V any](generateMissingValue MapGenerator[K, V], opts ...CacheOption) *CachedMap[K, V] {
-	options := cacheOptions{}
+func NewCachedMap[K comparable, V any](generateMissingValue MapGenerator[K, V], opts ...MapCacheOption) *CachedMap[K, V] {
+	options := mapCacheOptions{}
 	for _, opt := range opts {
-		opt(&options)
+		opt.applyMapCache(&options)
 	}
 
 	return &CachedMap[K, V]{

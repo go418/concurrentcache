@@ -37,7 +37,7 @@ type CachedItem[V any] struct {
 	generate ItemGenerator[V]
 
 	// options contains the configuration options for the CachedItem.
-	options cacheOptions
+	options itemCacheOptions
 }
 
 // ItemGenerator is a function that generates a value for a CachedItem.
@@ -46,10 +46,10 @@ type CachedItem[V any] struct {
 // synchronization, as it is guaranteed to be called sequentially.
 type ItemGenerator[V any] func(ctx context.Context) (V, error)
 
-func NewCachedItem[V any](generateMissingValue ItemGenerator[V], opts ...CacheOption) *CachedItem[V] {
-	options := cacheOptions{}
+func NewCachedItem[V any](generateMissingValue ItemGenerator[V], opts ...ItemCacheOption) *CachedItem[V] {
+	options := itemCacheOptions{}
 	for _, opt := range opts {
-		opt(&options)
+		opt.applyItemCache(&options)
 	}
 
 	return &CachedItem[V]{
