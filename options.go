@@ -25,10 +25,42 @@ type cacheOptions struct {
 	newWorkerContext NewWorkerContext
 }
 
-type CacheOption func(*cacheOptions)
+type mapCacheOptions struct {
+	cacheOptions
+}
 
-func WithMapNewWorkerContext(fn NewWorkerContext) CacheOption {
-	return func(opts *cacheOptions) {
+type itemCacheOptions struct {
+	cacheOptions
+}
+
+type ItemCacheOption interface {
+	applyItemCache(*itemCacheOptions)
+}
+
+type MapCacheOption interface {
+	applyMapCache(*mapCacheOptions)
+}
+
+func WithMapNewWorkerContext(fn NewWorkerContext) interface {
+	MapCacheOption
+	ItemCacheOption
+} {
+	return cacheOptionFunc(func(opts *cacheOptions) {
 		opts.newWorkerContext = fn
-	}
+	})
+}
+
+// cacheOptionFunc is a helper type to create cache options.
+
+type cacheOptionFunc func(*cacheOptions)
+
+var _ ItemCacheOption = cacheOptionFunc(nil)
+var _ MapCacheOption = cacheOptionFunc(nil)
+
+func (f cacheOptionFunc) applyItemCache(opts *itemCacheOptions) {
+	f(&opts.cacheOptions)
+}
+
+func (f cacheOptionFunc) applyMapCache(opts *mapCacheOptions) {
+	f(&opts.cacheOptions)
 }
