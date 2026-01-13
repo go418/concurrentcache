@@ -29,22 +29,24 @@ import (
 // generator function, even when made in parallel.
 func example1() {
 	sharedValue := 0
-	cache := concurrentcache.NewCachedItem(func(ctx context.Context) (int, error) {
+	cache := concurrentcache.NewCachedMap(func(ctx context.Context, key string) (int, error) {
 		// Simulate a long running operation.
 		time.Sleep(1 * time.Second)
+
+		fmt.Println("Generator function executed for key:", key)
 
 		// Update the shared value, we do not need to lock the value as the cache will
 		// ensure that there are no two simultaneous executions of this generator function.
 		sharedValue++
 
 		return sharedValue, nil
-	})
+	}, concurrentcache.WithCapacity(500))
 
 	// Requesting the value in parallel will only run the generator function once.
 	group := errgroup.Group{}
 	for range 10 {
 		group.Go(func() error {
-			result := cache.Get(context.TODO(), concurrentcache.AnyVersion)
+			result := cache.Get(context.TODO(), "key1", concurrentcache.AnyVersion)
 			if result.Value != 1 {
 				panic("sharedValue should be 1")
 			}
@@ -62,7 +64,7 @@ func example1() {
 	}
 
 	// Force the cache to refresh the value.
-	result := cache.Get(context.TODO(), concurrentcache.NonCachedVersion)
+	result := cache.Get(context.TODO(), "key1", concurrentcache.NonCachedVersion)
 	if result.Value != 2 {
 		panic("sharedValue should be 2")
 	}

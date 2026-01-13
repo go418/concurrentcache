@@ -19,9 +19,12 @@ package concurrentcache
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
+	"weak"
 
 	debuginternal "github.com/go418/concurrentcache/internal/debug"
+	lruinternal "github.com/go418/concurrentcache/internal/lru"
 	versionsinternal "github.com/go418/concurrentcache/internal/versions"
 )
 
@@ -31,6 +34,7 @@ import (
 type CachedMap[K comparable, V any] struct {
 	mu    sync.Mutex
 	items map[K]cacheItem[V]
+	lru   *lruinternal.LRU[*V]
 
 	// generate function that is called when the cached value is missing or out-of-date.
 	generate MapGenerator[K, V]
@@ -40,8 +44,9 @@ type CachedMap[K comparable, V any] struct {
 }
 
 type cacheItem[V any] struct {
-	cachedValue versionedValue[V]
+	cachedValue weakVersionedValue[V]
 	worker      *cacheWorker[V]
+	lruEl       *lruinternal.Element[*V]
 }
 
 // MapGenerator is a function that generates a value for a CachedMap.
@@ -51,13 +56,16 @@ type cacheItem[V any] struct {
 type MapGenerator[K comparable, V any] func(ctx context.Context, key K) (V, error)
 
 func NewCachedMap[K comparable, V any](generateMissingValue MapGenerator[K, V], opts ...MapCacheOption) *CachedMap[K, V] {
-	options := mapCacheOptions{}
+	options := mapCacheOptions{
+		capacity: 1000,
+	}
 	for _, opt := range opts {
 		opt.applyMapCache(&options)
 	}
 
 	return &CachedMap[K, V]{
 		items:    make(map[K]cacheItem[V]),
+		lru:      lruinternal.New[*V](options.capacity),
 		generate: generateMissingValue,
 		options:  options,
 	}
@@ -83,8 +91,15 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 	{
 		cachedValue := item.cachedValue
 		if !cachedValue.isZero() && cachedValue.isNotOlderThan(minVersion) {
-			defer c.mu.Unlock() // Unlock after reading the cached value.
-			return cachedValue.toResult(true)
+			if result, strongPtr, ok := cachedValue.strong(); ok {
+				// if we found a cached value, make sure we have a strong reference
+				// in the LRU
+				item.lruEl = c.lru.MoveToFront(item.lruEl, strongPtr)
+				c.items[key] = item
+
+				defer c.mu.Unlock() // Unlock after reading the cached value.
+				return result.toResult(true)
+			}
 		}
 		nextVersion = cachedValue.newer()
 	}
@@ -205,7 +220,20 @@ func (c *CachedMap[K, V]) run(ctx context.Context, worker *cacheWorker[V], key K
 
 	// Update the cache value if the worker was not canceled
 	if worker.nrGetCallsWaiting > 0 {
-		item.cachedValue = worker.returnValue
+		item.cachedValue.cleanup.Stop() // Disable previous cleanup.
+		ptrValue := &worker.returnValue.value
+		item.cachedValue = weakVersionedValue[V]{
+			versionedValue: versionedValue[weak.Pointer[V]]{
+				value:   weak.Make(ptrValue),
+				err:     worker.returnValue.err,
+				version: worker.returnValue.version,
+			},
+			cleanup: runtime.AddCleanup(ptrValue, c.delete, deleteKey[K]{
+				key:          key,
+				exactVersion: worker.returnValue.version,
+			}),
+		}
+		item.lruEl = c.lru.MoveToFront(item.lruEl, ptrValue)
 	}
 
 	c.items[key] = item
@@ -265,9 +293,40 @@ func (c *CachedMap[K, V]) setLocked(key K, value V, minVersion CacheVersion) {
 		return
 	}
 
-	item.cachedValue = versionedValue[V]{
-		value:   value,
-		version: minVersion,
+	item.cachedValue.cleanup.Stop() // Disable previous cleanup.
+	ptrValue := &value
+	item.cachedValue = weakVersionedValue[V]{
+		versionedValue: versionedValue[weak.Pointer[V]]{
+			value:   weak.Make(ptrValue),
+			version: minVersion,
+		},
+		cleanup: runtime.AddCleanup(ptrValue, c.delete, deleteKey[K]{
+			key:          key,
+			exactVersion: minVersion,
+		}),
 	}
+	item.lruEl = c.lru.MoveToFront(item.lruEl, ptrValue)
 	c.items[key] = item
+}
+
+type deleteKey[K comparable] struct {
+	key          K
+	exactVersion CacheVersion
+}
+
+func (c *CachedMap[K, V]) delete(key deleteKey[K]) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	item, ok := c.items[key.key]
+	if !ok {
+		return
+	}
+
+	// Only delete the item if the cached value is at the exact version.
+	if item.cachedValue.version != key.exactVersion {
+		return
+	}
+
+	delete(c.items, key.key)
 }

@@ -18,6 +18,8 @@ package concurrentcache
 
 import (
 	"context"
+	"runtime"
+	"weak"
 
 	versionsinternal "github.com/go418/concurrentcache/internal/versions"
 )
@@ -101,6 +103,24 @@ func (vv versionedValue[V]) toResult(isFromCache bool) Result[V] {
 		// of the result plus one, making it newer than the current version.
 		NextVersion: versionsinternal.NextVersion(vv.version),
 	}
+}
+
+type weakVersionedValue[V any] struct {
+	versionedValue[weak.Pointer[V]]
+	cleanup runtime.Cleanup
+}
+
+func (wvv weakVersionedValue[V]) strong() (versionedValue[V], *V, bool) {
+	strongPtr := wvv.value.Value()
+	if strongPtr == nil {
+		return versionedValue[V]{}, nil, false
+	}
+
+	return versionedValue[V]{
+		value:   *strongPtr,
+		err:     wvv.err,
+		version: wvv.version,
+	}, strongPtr, true
 }
 
 type cacheWorker[V any] struct {
