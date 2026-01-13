@@ -29,11 +29,10 @@ import (
 )
 
 func TestMapLogger(t *testing.T) {
-	rootCtx := context.Background()
 	testLogger := ktesting.NewLogger(t, ktesting.NewConfig(
 		ktesting.BufferLogs(true),
 	))
-	rootCtx = logr.NewContext(rootCtx, testLogger)
+	logCtx := logr.NewContext(t.Context(), testLogger)
 
 	step1 := make(chan struct{})
 	step2 := make(chan struct{})
@@ -50,7 +49,7 @@ func TestMapLogger(t *testing.T) {
 		return struct{}{}, nil
 	}, concurrentcache.WithMapNewWorkerContext(logger.NewWorkerContextWithLogger))
 
-	get1Ctx, get1CtxCancel := context.WithCancel(rootCtx)
+	get1Ctx, get1CtxCancel := context.WithCancel(logCtx)
 	go func() {
 		result := cache.Get(get1Ctx, "key1", concurrentcache.AnyVersion)
 		require.ErrorContains(t, result.Error, "context canceled")
@@ -58,7 +57,7 @@ func TestMapLogger(t *testing.T) {
 	}()
 	go func() {
 		<-step1
-		result := cache.Get(debug.OnStartedWaiting(rootCtx, func() { close(step2) }), "key1", concurrentcache.AnyVersion)
+		result := cache.Get(debug.OnStartedWaiting(logCtx, func() { close(step2) }), "key1", concurrentcache.AnyVersion)
 		require.NoError(t, result.Error)
 		close(step4)
 	}()
@@ -76,11 +75,10 @@ INFO test log 2 worker="detached" key="value"
 }
 
 func TestItemLogger(t *testing.T) {
-	rootCtx := context.Background()
 	testLogger := ktesting.NewLogger(t, ktesting.NewConfig(
 		ktesting.BufferLogs(true),
 	))
-	rootCtx = logr.NewContext(rootCtx, testLogger)
+	logCtx := logr.NewContext(t.Context(), testLogger)
 
 	step1 := make(chan struct{})
 	step2 := make(chan struct{})
@@ -97,7 +95,7 @@ func TestItemLogger(t *testing.T) {
 		return struct{}{}, nil
 	}, concurrentcache.WithMapNewWorkerContext(logger.NewWorkerContextWithLogger))
 
-	get1Ctx, get1CtxCancel := context.WithCancel(rootCtx)
+	get1Ctx, get1CtxCancel := context.WithCancel(logCtx)
 	go func() {
 		result := cache.Get(get1Ctx, concurrentcache.AnyVersion)
 		require.ErrorContains(t, result.Error, "context canceled")
@@ -105,7 +103,7 @@ func TestItemLogger(t *testing.T) {
 	}()
 	go func() {
 		<-step1
-		result := cache.Get(debug.OnStartedWaiting(rootCtx, func() { close(step2) }), concurrentcache.AnyVersion)
+		result := cache.Get(debug.OnStartedWaiting(logCtx, func() { close(step2) }), concurrentcache.AnyVersion)
 		require.NoError(t, result.Error)
 		close(step4)
 	}()

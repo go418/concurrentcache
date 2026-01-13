@@ -32,8 +32,6 @@ import (
 
 // The multiple Get calls for the same key should result in a single generateMissingValue call.
 func TestItemMultiple(t *testing.T) {
-	rootCtx := context.Background()
-
 	count := 0
 	cache := concurrentcache.NewCachedItem(func(ctx context.Context) (returnValue, error) {
 		count++
@@ -43,7 +41,7 @@ func TestItemMultiple(t *testing.T) {
 	})
 
 	for i := range 10 {
-		result := cache.Get(rootCtx, concurrentcache.AnyVersion)
+		result := cache.Get(t.Context(), concurrentcache.AnyVersion)
 		require.Equal(t, returnValue{count: 1}, result.Value)
 		require.NoError(t, result.Error)
 		require.Equal(t, i > 0, result.FromCache)
@@ -55,8 +53,6 @@ func TestItemMultiple(t *testing.T) {
 
 // An error returned by generateMissingValue should be cached similarly to a valid value.
 func TestItemError(t *testing.T) {
-	rootCtx := context.Background()
-
 	count := 0
 	cache := concurrentcache.NewCachedItem(func(ctx context.Context) (returnValue, error) {
 		count++
@@ -67,7 +63,7 @@ func TestItemError(t *testing.T) {
 	})
 
 	for i := range 10 {
-		result := cache.Get(rootCtx, concurrentcache.AnyVersion)
+		result := cache.Get(t.Context(), concurrentcache.AnyVersion)
 		require.Equal(t, returnValue{count: 1}, result.Value)
 		require.Equal(t, returnError{value: returnValue{count: 1}}, result.Error)
 		require.Equal(t, i > 0, result.FromCache)
@@ -83,8 +79,6 @@ func TestItemError(t *testing.T) {
 // 2. set minVersion=NonCachedVersion, will force a non-cached value
 // 3. set minVersion=result.NextVersion, will return a cached result only if it is newer than the previous result
 func TestItemCacheVersion(t *testing.T) {
-	rootCtx := context.Background()
-
 	t.Run("repeated calls with minVersion=AnyVersion should result in one call to generateMissingValue", func(t *testing.T) {
 		count := 0
 		cache := concurrentcache.NewCachedItem(func(ctx context.Context) (returnValue, error) {
@@ -95,14 +89,14 @@ func TestItemCacheVersion(t *testing.T) {
 		})
 
 		for i := range 10 {
-			result := cache.Get(rootCtx, concurrentcache.AnyVersion)
+			result := cache.Get(t.Context(), concurrentcache.AnyVersion)
 			require.Equal(t, returnValue{count: 1}, result.Value)
 			require.NoError(t, result.Error)
 			require.Equal(t, i > 0, result.FromCache)
 		}
 
 		// Get the value again.
-		result := cache.Get(rootCtx, concurrentcache.NonCachedVersion)
+		result := cache.Get(t.Context(), concurrentcache.NonCachedVersion)
 		require.Equal(t, returnValue{count: 2}, result.Value)
 		require.NoError(t, result.Error)
 		require.False(t, result.FromCache)
@@ -117,10 +111,10 @@ func TestItemCacheVersion(t *testing.T) {
 			}, nil
 		})
 
-		result := cache.Get(rootCtx, concurrentcache.AnyVersion)
+		result := cache.Get(t.Context(), concurrentcache.AnyVersion)
 
 		for i := range 10 {
-			result := cache.Get(rootCtx, result.NextVersion)
+			result := cache.Get(t.Context(), result.NextVersion)
 			require.Equal(t, returnValue{count: 2}, result.Value)
 			require.NoError(t, result.Error)
 			require.Equal(t, i > 0, result.FromCache)
@@ -138,7 +132,7 @@ func TestItemCacheVersion(t *testing.T) {
 		})
 
 		for i := range 10 {
-			result := cache.Get(rootCtx, concurrentcache.AnyVersion)
+			result := cache.Get(t.Context(), concurrentcache.AnyVersion)
 			require.Equal(t, returnValue{count: 1}, result.Value)
 			require.Equal(t, returnError{value: returnValue{count: 1}}, result.Error)
 			require.Equal(t, i > 0, result.FromCache)
@@ -156,8 +150,7 @@ func TestItemParralel(t *testing.T) {
 		}, nil
 	})
 
-	rootCtx := context.Background()
-	group, gctx := errgroup.WithContext(rootCtx)
+	group, gctx := errgroup.WithContext(t.Context())
 
 	for range 5000 {
 		group.Go(func() error {
@@ -182,8 +175,6 @@ func testItemGet(
 	nrRepeats int,
 	allAtSameTime bool,
 ) {
-	rootCtx := context.Background()
-
 	nrConcurrentGetCalls := nrConcurrentGetCallsNonCanceled + nrConcurrentGetCallsCanceled
 
 	count := 0                   // Count how many times generateMissingValue was called for each key.
@@ -211,7 +202,7 @@ func testItemGet(
 	for expectedCount := 1; expectedCount <= nrRepeats; expectedCount++ {
 		startingGetCalls := nrConcurrentGetCalls
 		allWaiting := make(chan struct{}) // Block until all Get calls are waiting.
-		debugContext := debug.OnStartedWaiting(rootCtx, func() {
+		debugContext := debug.OnStartedWaiting(t.Context(), func() {
 			startingGetCalls--
 
 			if startingGetCalls == 0 {
