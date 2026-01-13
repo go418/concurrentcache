@@ -27,6 +27,12 @@ type cacheOptions struct {
 
 type mapCacheOptions struct {
 	cacheOptions
+
+	// capacity is the maximum number of items to keep in the cache.
+	// LRU eviction is used when the capacity is exceeded. An evicted item
+	// will be garbage collected if there are no other references to it.
+	// Defaults to 1000.
+	capacity int
 }
 
 type itemCacheOptions struct {
@@ -50,6 +56,18 @@ func WithMapNewWorkerContext(fn NewWorkerContext) interface {
 	})
 }
 
+// Set the capacity of the map cache, any value less than
+// 0 will be ignored.
+func WithCapacity(capacity int) MapCacheOption {
+	return mapCacheOptionFunc(func(opts *mapCacheOptions) {
+		if capacity < 0 {
+			return
+		}
+
+		opts.capacity = capacity
+	})
+}
+
 // cacheOptionFunc is a helper type to create cache options.
 
 type cacheOptionFunc func(*cacheOptions)
@@ -63,4 +81,14 @@ func (f cacheOptionFunc) applyItemCache(opts *itemCacheOptions) {
 
 func (f cacheOptionFunc) applyMapCache(opts *mapCacheOptions) {
 	f(&opts.cacheOptions)
+}
+
+// mapCacheOptionFunc is a helper type to create map cache options.
+
+type mapCacheOptionFunc func(*mapCacheOptions)
+
+var _ MapCacheOption = mapCacheOptionFunc(nil)
+
+func (f mapCacheOptionFunc) applyMapCache(opts *mapCacheOptions) {
+	f(opts)
 }

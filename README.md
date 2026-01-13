@@ -12,6 +12,8 @@
 - **Version-queryable cache**: you can request (1) any value (possibly cached), (2) a fresh
 value (not cached), (3) a value that is newer than a value returned previously.  
 *see [A version-queryable cache](#a-version-queryable-cache)*
+- **Finite sized**: the CachedMap has a max capacity of 1000 elements by default. LRU eviction is used
+when capacity is reached and this exposes evicted elements to be garbage collected by Go.
 
 ## Usage
 
@@ -31,22 +33,24 @@ import (
 
 func main() {
 	sharedValue := 0
-	cache := concurrentcache.NewCachedItem(func(ctx context.Context) (int, error) {
+	cache := concurrentcache.NewCachedMap(func(ctx context.Context, key string) (int, error) {
 		// Simulate a long running operation.
 		time.Sleep(1 * time.Second)
+
+		fmt.Println("Generator function executed for key:", key)
 
 		// Update the shared value, we do not need to lock the value as the cache will
 		// ensure that there are no two simultaneous executions of this generator function.
 		sharedValue++
 
 		return sharedValue, nil
-	})
+	}, concurrentcache.WithCapacity(500))
 
 	// Requesting the value in parallel will only run the generator function once.
 	group := errgroup.Group{}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		group.Go(func() error {
-			result := cache.Get(context.TODO(), concurrentcache.AnyVersion)
+			result := cache.Get(context.TODO(), "key1", concurrentcache.AnyVersion)
 			if result.Value != 1 {
 				panic("sharedValue should be 1")
 			}
@@ -64,7 +68,7 @@ func main() {
 	}
 
 	// Force the cache to refresh the value.
-	result := cache.Get(context.TODO(), concurrentcache.NonCachedVersion)
+	result := cache.Get(context.TODO(), "key1", concurrentcache.NonCachedVersion)
 	if result.Value != 2 {
 		panic("sharedValue should be 2")
 	}

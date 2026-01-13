@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -424,4 +426,193 @@ func FuzzTestMapGet(f *testing.F) {
 
 		testMapGet(t, nrConcurrentGetCallsNonCanceled, nrConcurrentGetCallsCanceled, nrKeys, nrRepeats, allAtSameTime)
 	})
+}
+
+// Weak cache should allow values to be garbage collected and removed from the cache.
+func TestMapWeakCache(t *testing.T) {
+	type testCase struct {
+		capacity int
+		run      func(t *testing.T, cache *concurrentcache.CachedMap[string, returnValue])
+	}
+
+	getKey := func(
+		t *testing.T,
+		cache *concurrentcache.CachedMap[string, returnValue],
+		minVersion concurrentcache.CacheVersion,
+		key string, count int, cached bool,
+	) returnValue {
+		result := cache.Get(t.Context(), key, minVersion)
+		require.Equal(t, returnValue{requestedKey: key, count: count}, result.Value)
+		require.NoError(t, result.Error)
+		require.Equal(t, cached, result.FromCache)
+		return result.Value
+	}
+
+	for i, tc := range []testCase{
+		{
+			capacity: 1,
+			run: func(t *testing.T, cache *concurrentcache.CachedMap[string, returnValue]) {
+				getKey(t, cache, concurrentcache.AnyVersion, "key1", 1, false)
+				getKey(t, cache, concurrentcache.AnyVersion, "key2", 2, false)
+
+				// Force GC and wait until the weakly cached value is collected and removed.
+				for range 5 {
+					runtime.GC()
+					time.Sleep(5 * time.Millisecond)
+				}
+
+				getKey(t, cache, concurrentcache.AnyVersion, "key2", 2, true) // last generated value should still be cached
+				getKey(t, cache, concurrentcache.AnyVersion, "key1", 3, false)
+			},
+		},
+		{
+			capacity: 1,
+			run: func(t *testing.T, cache *concurrentcache.CachedMap[string, returnValue]) {
+				getKey(t, cache, concurrentcache.AnyVersion, "key1", 1, false)
+				getKey(t, cache, concurrentcache.AnyVersion, "key2", 2, false)
+				getKey(t, cache, concurrentcache.AnyVersion, "key1", 1, true)
+
+				// Force GC and wait until the weakly cached value is collected and removed.
+				for range 5 {
+					runtime.GC()
+					time.Sleep(5 * time.Millisecond)
+				}
+
+				getKey(t, cache, concurrentcache.AnyVersion, "key1", 1, true) // last accessed value should still be cached
+				getKey(t, cache, concurrentcache.AnyVersion, "key2", 3, false)
+			},
+		},
+		{
+			capacity: 2,
+			run: func(t *testing.T, cache *concurrentcache.CachedMap[string, returnValue]) {
+				getKey(t, cache, concurrentcache.AnyVersion, "key1", 1, false)
+				getKey(t, cache, concurrentcache.AnyVersion, "key2", 2, false)
+				getKey(t, cache, concurrentcache.NonCachedVersion, "key2", 3, false)
+				getKey(t, cache, concurrentcache.NonCachedVersion, "key1", 4, false)
+				getKey(t, cache, concurrentcache.NonCachedVersion, "key2", 5, false)
+				getKey(t, cache, concurrentcache.NonCachedVersion, "key2", 6, false)
+				getKey(t, cache, concurrentcache.NonCachedVersion, "key2", 7, false)
+				getKey(t, cache, concurrentcache.NonCachedVersion, "key1", 8, false)
+				getKey(t, cache, concurrentcache.NonCachedVersion, "key1", 9, false)
+
+				// Force GC and wait until the weakly cached value is collected and removed.
+				for range 5 {
+					runtime.GC()
+					time.Sleep(5 * time.Millisecond)
+				}
+
+				// Both values should still be cached as capacity is 2.
+				getKey(t, cache, concurrentcache.AnyVersion, "key1", 9, true)
+				getKey(t, cache, concurrentcache.AnyVersion, "key2", 7, true)
+			},
+		},
+	} {
+		t.Run(fmt.Sprintf("test-case-%d", i), func(t *testing.T) {
+			count := 0
+			cache := concurrentcache.NewCachedMap(func(ctx context.Context, key string) (returnValue, error) {
+				count++
+				return returnValue{
+					requestedKey: key,
+					count:        count,
+				}, nil
+			}, concurrentcache.WithCapacity(tc.capacity))
+
+			tc.run(t, cache)
+		})
+	}
+}
+
+func TestMapWeakCacheStress(t *testing.T) {
+	const capacity = 100
+
+	count := int64(0)
+	cache := concurrentcache.NewCachedMap(func(ctx context.Context, key string) (int64, error) {
+		return atomic.AddInt64(&count, 1), nil
+	}, concurrentcache.WithCapacity(capacity))
+
+	for _, minVersion := range []concurrentcache.CacheVersion{
+		concurrentcache.AnyVersion,
+		concurrentcache.NonCachedVersion,
+	} {
+		// Add 5000 unique entries in parallel
+		{
+			group, gctx := errgroup.WithContext(t.Context())
+			for i := range 5000 {
+				group.Go(func() error {
+					key := fmt.Sprintf("key-%d", i+1)
+					result := cache.Get(gctx, key, minVersion)
+					require.NoError(t, result.Error)
+					return nil
+				})
+			}
+			require.NoError(t, group.Wait())
+		}
+
+		// Re-access the first entries that fit within capacity in parallel
+		{
+			group, gctx := errgroup.WithContext(t.Context())
+			for i := range 5000 {
+				group.Go(func() error {
+					key := fmt.Sprintf("key-%d", (i%capacity)+1)
+					result := cache.Get(gctx, key, minVersion)
+					require.NoError(t, result.Error)
+					return nil
+				})
+			}
+
+			// Perform GC while the goroutines are running.
+			for range 100 {
+				runtime.GC()
+				time.Sleep(1 * time.Millisecond)
+			}
+
+			require.NoError(t, group.Wait())
+		}
+
+		// Force GC and wait until the weakly cached value is collected and removed.
+		for range 5 {
+			runtime.GC()
+			time.Sleep(5 * time.Millisecond)
+		}
+
+		// All keys that we fetched last (within capacity) should be cached.
+		for i := range capacity {
+			key := fmt.Sprintf("key-%d", i+1)
+			result := cache.Get(t.Context(), key, concurrentcache.AnyVersion)
+			require.NoError(t, result.Error)
+			require.True(t, result.FromCache)
+		}
+	}
+}
+
+// Ensure the memory footprint of a weak cache remains bounded after GC.
+func TestMapWeakCacheMemory(t *testing.T) {
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	cache := concurrentcache.NewCachedMap(func(ctx context.Context, key string) ([]byte, error) {
+		return make([]byte, 1*1024*1024 /* 1MB per value */), nil
+	}, concurrentcache.WithCapacity(0))
+
+	for i := range 1000 {
+		cache.Get(t.Context(), fmt.Sprintf("k%d", i), concurrentcache.AnyVersion)
+	}
+
+	// Force GC and measure memory used by the process after weak values are collectible.
+	for range 3 {
+		runtime.GC()
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+
+	// Allow a reasonable headroom (10MB) for allocations unrelated to the cache.
+	const threshold = uint64(10 << 20)
+	used := after.HeapAlloc
+	base := before.HeapAlloc
+	if used > base+threshold {
+		t.Fatalf("weak cache memory footprint too large: before=%d after=%d diff=%d", base, used, used-base)
+	}
 }
