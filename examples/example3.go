@@ -44,7 +44,7 @@ func example3() {
 	group := errgroup.Group{}
 
 	// Make 5 requests that will be cancelled after 500ms (halfway through the computation)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		group.Go(func() error {
 			requestCtx, cancel := context.WithTimeout(context.TODO(), 500*time.Millisecond)
 			defer cancel()
@@ -61,7 +61,7 @@ func example3() {
 	}
 
 	// Make 5 requests that will succeed
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		group.Go(func() error {
 			result := cache.Get(context.TODO(), concurrentcache.AnyVersion)
 

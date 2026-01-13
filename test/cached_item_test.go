@@ -42,7 +42,7 @@ func TestItemMultiple(t *testing.T) {
 		}, nil
 	})
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result := cache.Get(rootCtx, concurrentcache.AnyVersion)
 		require.Equal(t, returnValue{count: 1}, result.Value)
 		require.NoError(t, result.Error)
@@ -66,7 +66,7 @@ func TestItemError(t *testing.T) {
 		return rv, returnError{value: rv}
 	})
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result := cache.Get(rootCtx, concurrentcache.AnyVersion)
 		require.Equal(t, returnValue{count: 1}, result.Value)
 		require.Equal(t, returnError{value: returnValue{count: 1}}, result.Error)
@@ -94,7 +94,7 @@ func TestItemCacheVersion(t *testing.T) {
 			}, nil
 		})
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			result := cache.Get(rootCtx, concurrentcache.AnyVersion)
 			require.Equal(t, returnValue{count: 1}, result.Value)
 			require.NoError(t, result.Error)
@@ -119,7 +119,7 @@ func TestItemCacheVersion(t *testing.T) {
 
 		result := cache.Get(rootCtx, concurrentcache.AnyVersion)
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			result := cache.Get(rootCtx, result.NextVersion)
 			require.Equal(t, returnValue{count: 2}, result.Value)
 			require.NoError(t, result.Error)
@@ -137,7 +137,7 @@ func TestItemCacheVersion(t *testing.T) {
 			return rv, returnError{value: rv}
 		})
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			result := cache.Get(rootCtx, concurrentcache.AnyVersion)
 			require.Equal(t, returnValue{count: 1}, result.Value)
 			require.Equal(t, returnError{value: returnValue{count: 1}}, result.Error)
@@ -159,7 +159,7 @@ func TestItemParralel(t *testing.T) {
 	rootCtx := context.Background()
 	group, gctx := errgroup.WithContext(rootCtx)
 
-	for i := 0; i < 5000; i++ {
+	for range 5000 {
 		group.Go(func() error {
 			result := cache.Get(gctx, concurrentcache.NonCachedVersion)
 			require.NoError(t, result.Error)
@@ -225,7 +225,7 @@ func testItemGet(
 		gctxCancelled, cancel := context.WithCancelCause(debugContext)
 
 		groupNormal := errgroup.Group{}
-		for i := 0; i < nrConcurrentGetCallsNonCanceled; i++ {
+		for range nrConcurrentGetCallsNonCanceled {
 			groupNormal.Go(func() error {
 				result := cache.Get(debugContext, concurrentcache.NonCachedVersion)
 
@@ -248,7 +248,7 @@ func testItemGet(
 		}
 
 		groupCancelled := errgroup.Group{}
-		for i := 0; i < nrConcurrentGetCallsCanceled; i++ {
+		for range nrConcurrentGetCallsCanceled {
 			groupCancelled.Go(func() error {
 				result := cache.Get(gctxCancelled, concurrentcache.NonCachedVersion)
 

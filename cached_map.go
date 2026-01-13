@@ -188,11 +188,11 @@ func (c *CachedMap[K, V]) Get(ctx context.Context, key K, minVersion CacheVersio
 
 func (c *CachedMap[K, V]) run(ctx context.Context, worker *cacheWorker[V], key K) {
 	defer close(worker.done)
-	result, error := c.generate(ctx, key)
+	result, err := c.generate(ctx, key)
 
 	// set the result on the worker
 	worker.returnValue.value = result
-	worker.returnValue.err = error
+	worker.returnValue.err = err
 
 	// update the cache item
 	c.mu.Lock()
