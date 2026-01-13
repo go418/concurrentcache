@@ -42,7 +42,7 @@ func example2() {
 
 	// Requesting the value in parallel will only run the generator function once.
 	group := errgroup.Group{}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		group.Go(func() error {
 			result := cache.Get(context.TODO(), concurrentcache.AnyVersion)
 			if !result.FromCache {

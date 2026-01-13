@@ -178,11 +178,11 @@ func (c *CachedItem[V]) Get(ctx context.Context, minVersion CacheVersion) Result
 
 func (c *CachedItem[V]) run(ctx context.Context, worker *cacheWorker[V]) {
 	defer close(worker.done)
-	result, error := c.generate(ctx)
+	result, err := c.generate(ctx)
 
 	// set the result on the worker
 	worker.returnValue.value = result
-	worker.returnValue.err = error
+	worker.returnValue.err = err
 
 	// update the cache item
 	c.mu.Lock()

@@ -87,7 +87,7 @@ func TestMapSameKey(t *testing.T) {
 		}, nil
 	})
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result := cache.Get(rootCtx, "key1", concurrentcache.AnyVersion)
 		require.Equal(t, returnValue{requestedKey: "key1", count: 1}, result.Value)
 		require.NoError(t, result.Error)
@@ -118,7 +118,7 @@ func TestMapError(t *testing.T) {
 		return rv, returnError{value: rv}
 	})
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result := cache.Get(rootCtx, "key1", concurrentcache.AnyVersion)
 		require.Equal(t, returnValue{requestedKey: "key1", count: 1}, result.Value)
 		require.Equal(t, returnError{value: returnValue{requestedKey: "key1", count: 1}}, result.Error)
@@ -153,7 +153,7 @@ func TestMapCacheVersion(t *testing.T) {
 			}, nil
 		})
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			result := cache.Get(rootCtx, "key1", concurrentcache.AnyVersion)
 			require.Equal(t, returnValue{requestedKey: "key1", count: 1}, result.Value)
 			require.NoError(t, result.Error)
@@ -179,7 +179,7 @@ func TestMapCacheVersion(t *testing.T) {
 
 		result := cache.Get(rootCtx, "key1", concurrentcache.AnyVersion)
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			result := cache.Get(rootCtx, "key1", result.NextVersion)
 			require.Equal(t, returnValue{requestedKey: "key1", count: 2}, result.Value)
 			require.NoError(t, result.Error)
@@ -198,7 +198,7 @@ func TestMapCacheVersion(t *testing.T) {
 			return rv, returnError{value: rv}
 		})
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			result := cache.Get(rootCtx, "key1", concurrentcache.AnyVersion)
 			require.Equal(t, returnValue{requestedKey: "key1", count: 1}, result.Value)
 			require.Equal(t, returnError{value: returnValue{requestedKey: "key1", count: 1}}, result.Error)
@@ -221,7 +221,7 @@ func TestMapParralel(t *testing.T) {
 	rootCtx := context.Background()
 	group, gctx := errgroup.WithContext(rootCtx)
 
-	for i := 0; i < 5000; i++ {
+	for range 5000 {
 		group.Go(func() error {
 			result := cache.Get(gctx, "key1", concurrentcache.NonCachedVersion)
 			require.Equal(t, "key1", result.Value.requestedKey)
@@ -278,8 +278,6 @@ func testMapGet(
 
 	maingroup := errgroup.Group{}
 	for key, block := range blocks {
-		key := key
-		block := block
 		maingroup.Go(func() error {
 			// We run this test multiple times, every time we run 'nrConcurrentGetCalls' Get calls in parallel,
 			// they should all result in a single generateMissingValue call per run. Then we run the test again.
@@ -301,7 +299,7 @@ func testMapGet(
 				gctxCancelled, cancel := context.WithCancelCause(debugContext)
 
 				groupNormal := errgroup.Group{}
-				for i := 0; i < nrConcurrentGetCallsNonCanceled; i++ {
+				for range nrConcurrentGetCallsNonCanceled {
 					groupNormal.Go(func() error {
 						result := cache.Get(debugContext, key, concurrentcache.NonCachedVersion)
 
@@ -325,7 +323,7 @@ func testMapGet(
 				}
 
 				groupCancelled := errgroup.Group{}
-				for i := 0; i < nrConcurrentGetCallsCanceled; i++ {
+				for range nrConcurrentGetCallsCanceled {
 					groupCancelled.Go(func() error {
 						result := cache.Get(gctxCancelled, key, concurrentcache.NonCachedVersion)
 
